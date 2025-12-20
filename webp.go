@@ -1,167 +1,93 @@
-// Package webp is a Go library and CLI tool to encode/decode HEIF/HEIC images without system dependencies (CGO).
+// Package webp is a Go library and CLI tool to encode/decode WebP images without system dependencies (CGO).
 package webp
 
 /*
 #include <stdlib.h>
 #include <string.h>
-#include <libheif/heif.h>
-
-// Memory writer structure to capture encoded HEIF data
-typedef struct {
-    uint8_t* data;
-    size_t size;
-    size_t capacity;
-} memory_writer;
-
-// Writer callback: appends data to our growing buffer
-static struct heif_error writer_write(struct heif_context* ctx, const void* data, size_t size, void* userdata) {
-    memory_writer* writer = (memory_writer*)userdata;
-
-    // Grow buffer if needed
-    if (writer->size + size > writer->capacity) {
-        size_t new_capacity = writer->capacity * 2;
-        if (new_capacity < writer->size + size) {
-            new_capacity = writer->size + size;
-        }
-        uint8_t* new_data = (uint8_t*)realloc(writer->data, new_capacity);
-        if (!new_data) {
-            struct heif_error err = {heif_error_Memory_allocation_error, heif_suberror_Unspecified, "Out of memory"};
-            return err;
-        }
-        writer->data = new_data;
-        writer->capacity = new_capacity;
-    }
-
-    // Append data
-    memcpy(writer->data + writer->size, data, size);
-    writer->size += size;
-
-    struct heif_error err = {heif_error_Ok, heif_suberror_Unspecified, "Success"};
-    return err;
-}
+#include <encode.h>
+#include <decode.h>
 
 // Constants
-#define INITIAL_BUFFER_SIZE (64 * 1024)
 #define BYTES_PER_PIXEL 4
 
-// Encode HEIF image to memory buffer
-uint8_t* encode_heif_to_memory(struct heif_context* ctx, size_t* out_size, size_t estimated_size) {
-    if (!ctx || !out_size) {
+// Encode WebP image to memory buffer using lossy compression
+uint8_t* encode_webp_lossy(const uint8_t* rgba, int width, int height, int stride,
+                            float quality, size_t* out_size) {
+    if (!rgba || width <= 0 || height <= 0 || !out_size) {
         if (out_size) *out_size = 0;
         return NULL;
     }
 
-    memory_writer writer;
-    // Use estimated size or default initial buffer size
-    size_t initial_capacity = estimated_size > 0 && estimated_size < INITIAL_BUFFER_SIZE
-                              ? estimated_size : INITIAL_BUFFER_SIZE;
+    uint8_t* output = NULL;
+    *out_size = WebPEncodeRGBA(rgba, width, height, stride, quality, &output);
 
-    writer.data = (uint8_t*)malloc(initial_capacity);
-    if (!writer.data) {
-        *out_size = 0;
-        return NULL;
-    }
-    writer.size = 0;
-    writer.capacity = initial_capacity;
-
-    struct heif_writer heif_writer;
-    heif_writer.writer_api_version = 1;
-    heif_writer.write = writer_write;
-
-    struct heif_error err = heif_context_write(ctx, &heif_writer, &writer);
-    if (err.code != heif_error_Ok) {
-        free(writer.data);
-        *out_size = 0;
+    if (*out_size == 0) {
         return NULL;
     }
 
-    *out_size = writer.size;
-    return writer.data;
+    return output;
 }
 
-// Full decode: reads HEIF data from memory, gets the primary image,
-// decodes it into an interleaved RGBA plane, and returns the heif_image*.
-// Also returns the heif_context* and heif_image_handle* for cleanup.
-struct heif_image* decode_heif_image(const uint8_t *data, size_t size,
-                              struct heif_context **outCtx,
-                              struct heif_image_handle **outHandle) {
-    // Validate input parameters
-    if (!data || size == 0) {
+// Encode WebP image to memory buffer using lossless compression
+uint8_t* encode_webp_lossless(const uint8_t* rgba, int width, int height, int stride,
+                               size_t* out_size) {
+    if (!rgba || width <= 0 || height <= 0 || !out_size) {
+        if (out_size) *out_size = 0;
         return NULL;
     }
 
-    struct heif_context* ctx = heif_context_alloc();
-    if (!ctx) return NULL;
+    uint8_t* output = NULL;
+    *out_size = WebPEncodeLosslessRGBA(rgba, width, height, stride, &output);
 
-    struct heif_error err = heif_context_read_from_memory(ctx, data, size, NULL);
-    if (err.code != heif_error_Ok) {
-        heif_context_free(ctx);
+    if (*out_size == 0) {
         return NULL;
     }
 
-    struct heif_image_handle* handle = NULL;
-    err = heif_context_get_primary_image_handle(ctx, &handle);
-    if (err.code != heif_error_Ok) {
-        heif_context_free(ctx);
-        return NULL;
-    }
-
-    struct heif_image* img = NULL;
-    // ask for interleaved RGBA
-    err = heif_decode_image(handle, &img,
-                            heif_colorspace_RGB,
-                            heif_chroma_interleaved_RGBA,
-                            NULL);
-    if (err.code != heif_error_Ok) {
-        heif_image_handle_release(handle);
-        heif_context_free(ctx);
-        return NULL;
-    }
-
-    if (outCtx)    *outCtx    = ctx;
-    if (outHandle) *outHandle = handle;
-    return img;
+    return output;
 }
 
-// get_heif_config: reads just enough of the HEIF file to extract width/height.
-void get_heif_config(const uint8_t *data, size_t size,
-                     uint32_t *width, uint32_t *height) {
-    // Validate input parameters
-    if (!data || size == 0 || !width || !height) {
+// Decode WebP image from memory buffer
+uint8_t* decode_webp_to_rgba(const uint8_t* data, size_t data_size,
+                              int* width, int* height) {
+    if (!data || data_size == 0 || !width || !height) {
         if (width) *width = 0;
         if (height) *height = 0;
-        return;
+        return NULL;
     }
 
-    struct heif_context* ctx = heif_context_alloc();
-    if (!ctx) {
+    uint8_t* output = WebPDecodeRGBA(data, data_size, width, height);
+
+    if (!output || *width <= 0 || *height <= 0) {
+        if (output) free(output);
         *width = 0;
         *height = 0;
-        return;
+        return NULL;
     }
 
-    struct heif_error err = heif_context_read_from_memory(ctx, data, size, NULL);
-    if (err.code != heif_error_Ok) {
+    return output;
+}
+
+// Get WebP image configuration (dimensions)
+int get_webp_config(const uint8_t* data, size_t data_size,
+                    int* width, int* height) {
+    if (!data || data_size == 0 || !width || !height) {
+        if (width) *width = 0;
+        if (height) *height = 0;
+        return 0;
+    }
+
+    WebPBitstreamFeatures features;
+    VP8StatusCode status = WebPGetFeatures(data, data_size, &features);
+
+    if (status != VP8_STATUS_OK) {
         *width = 0;
         *height = 0;
-        heif_context_free(ctx);
-        return;
+        return 0;
     }
 
-    struct heif_image_handle* handle = NULL;
-    err = heif_context_get_primary_image_handle(ctx, &handle);
-    if (err.code != heif_error_Ok) {
-        *width = 0;
-        *height = 0;
-        heif_context_free(ctx);
-        return;
-    }
-
-    *width  = (uint32_t)heif_image_handle_get_width(handle);
-    *height = (uint32_t)heif_image_handle_get_height(handle);
-
-    heif_image_handle_release(handle);
-    heif_context_free(ctx);
+    *width = features.width;
+    *height = features.height;
+    return 1;
 }
 */
 import "C"
@@ -180,7 +106,7 @@ const (
 	losslessQuality = 100
 )
 
-func encodeHEIF(rgba image.RGBA, options Options) ([]byte, error) {
+func encodeWebP(rgba image.RGBA, options Options) ([]byte, error) {
 	width := rgba.Bounds().Dx()
 	height := rgba.Bounds().Dy()
 
@@ -194,71 +120,35 @@ func encodeHEIF(rgba image.RGBA, options Options) ([]byte, error) {
 		return nil, fmt.Errorf("quality must be between %d and %d, got %d", minQuality, maxQuality, options.Quality)
 	}
 
-	// Create the libheif context
-	ctx := C.heif_context_alloc()
-	if ctx == nil {
-		return nil, fmt.Errorf("failed to allocate HEIF context")
-	}
-	defer C.heif_context_free(ctx)
-
-	// Create an heicImage for the output
-	var heicImage *C.struct_heif_image
-	errCreate := C.heif_image_create(C.int(width), C.int(height), C.heif_colorspace_RGB, C.heif_chroma_interleaved_RGBA,
-		&heicImage)
-
-	if errCreate.code != C.heif_error_Ok {
-		return nil, fmt.Errorf("failed to create HEIC image: %v", C.GoString(errCreate.message))
-	}
-	defer C.heif_image_release(heicImage)
-
-	// Allocate the RGBA plane (8 bits)
-	errPlane := C.heif_image_add_plane(heicImage, C.heif_channel_interleaved, C.int(width), C.int(height), C.int(8))
-	if errPlane.code != C.heif_error_Ok {
-		return nil, fmt.Errorf("failed to add RGBA plane to HEIC image: %v", C.GoString(errPlane.message))
-	}
-
-	// Copy the pixels
-	var stride C.int
-	ptr := C.heif_image_get_plane(heicImage, C.heif_channel_interleaved, &stride)
-	planeSize := C.size_t(stride) * C.size_t(height)
-	C.memcpy(unsafe.Pointer(ptr), unsafe.Pointer(&rgba.Pix[0]), planeSize)
-
-	// Pick & configure HEVC encoder
-	var encoder *C.struct_heif_encoder
-	errEnc := C.heif_context_get_encoder_for_format(ctx, C.heif_compression_HEVC, &encoder)
-	if errEnc.code != C.heif_error_Ok {
-		return nil, fmt.Errorf("failed to create HEIC encoder: %v", C.GoString(errEnc.message))
-	}
-	defer C.heif_encoder_release(encoder)
-
-	// Set the image quality
-	var errQ C.struct_heif_error
-	if options.Quality < losslessQuality {
-		errQ = C.heif_encoder_set_lossy_quality(encoder, C.int(options.Quality))
-	} else {
-		errQ = C.heif_encoder_set_lossless(encoder, C.int(1))
-	}
-
-	if errQ.code != C.heif_error_Ok {
-		return nil, fmt.Errorf("failed to set the image quality: %v", C.GoString(errQ.message))
-	}
-
-	// Encode into the context
-	var handle *C.struct_heif_image_handle
-	errImg := C.heif_context_encode_image(ctx, heicImage, encoder, nil, &handle)
-	if errImg.code != C.heif_error_Ok {
-		return nil, fmt.Errorf("failed to encode HEIC image: %v", C.GoString(errImg.message))
-	}
-	defer C.heif_image_handle_release(handle)
-
-	// Encode to memory directly with size estimate
-	estimatedSize := C.size_t(width * height * bytesPerPixel / 10) // rough estimate: 10% of raw size
+	var cData *C.uint8_t
 	var size C.size_t
-	cData := C.encode_heif_to_memory(ctx, &size, estimatedSize)
-	if cData == nil {
-		return nil, fmt.Errorf("failed to encode HEIF image to memory")
+
+	// Encode based on quality setting
+	if options.Quality < losslessQuality {
+		// Lossy compression
+		cData = C.encode_webp_lossy(
+			(*C.uint8_t)(unsafe.Pointer(&rgba.Pix[0])),
+			C.int(width),
+			C.int(height),
+			C.int(rgba.Stride),
+			C.float(options.Quality),
+			&size,
+		)
+	} else {
+		// Lossless compression
+		cData = C.encode_webp_lossless(
+			(*C.uint8_t)(unsafe.Pointer(&rgba.Pix[0])),
+			C.int(width),
+			C.int(height),
+			C.int(rgba.Stride),
+			&size,
+		)
 	}
-	defer C.free(unsafe.Pointer(cData))
+
+	if cData == nil || size == 0 {
+		return nil, fmt.Errorf("failed to encode WebP image")
+	}
+	defer C.WebPFree(unsafe.Pointer(cData))
 
 	// Copy C memory to Go slice
 	data := C.GoBytes(unsafe.Pointer(cData), C.int(size))
@@ -266,81 +156,61 @@ func encodeHEIF(rgba image.RGBA, options Options) ([]byte, error) {
 	return data, nil
 }
 
-func decodeHEIFToRGBA(data []byte) (*image.RGBA, error) {
+func decodeWebPToRGBA(data []byte) (*image.RGBA, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty data buffer")
 	}
 
-	// Pin the data to prevent GC relocation
-	cData := C.CBytes(data)
-	defer C.free(cData)
+	var width, height C.int
 
-	// Call our C helper
-	var ctx *C.struct_heif_context
-	var handle *C.struct_heif_image_handle
-	img := C.decode_heif_image((*C.uint8_t)(cData), C.size_t(len(data)), &ctx, &handle)
-	if img == nil {
-		return nil, fmt.Errorf("failed to decode HEIF image")
+	// Decode the WebP image
+	cData := C.decode_webp_to_rgba(
+		(*C.uint8_t)(unsafe.Pointer(&data[0])),
+		C.size_t(len(data)),
+		&width,
+		&height,
+	)
+
+	if cData == nil || width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("failed to decode WebP image")
 	}
-	defer C.heif_image_release(img)
-	defer C.heif_image_handle_release(handle)
-	defer C.heif_context_free(ctx)
+	defer C.WebPFree(unsafe.Pointer(cData))
 
-	// Query width/height from the interleaved plane
-	width := int(C.heif_image_get_width(img, C.heif_channel_interleaved))
-	height := int(C.heif_image_get_height(img, C.heif_channel_interleaved))
+	w := int(width)
+	h := int(height)
 
-	if width <= 0 || height <= 0 {
-		return nil, fmt.Errorf("invalid decoded image dimensions: %dx%d", width, height)
-	}
+	// Create a Go image
+	goImg := image.NewRGBA(image.Rect(0, 0, w, h))
 
-	// Grab a pointer to the RGBA data and its stride
-	var cStride C.int
-	ptr := C.heif_image_get_plane_readonly(img, C.heif_channel_interleaved, &cStride)
-	rowBytes := int(cStride)
-
-	// Allocate our Go RGBA
-	goImg := image.NewRGBA(image.Rect(0, 0, width, height))
-
-	// Direct memory copy - more efficient than row-by-row with intermediate allocation
-	rowSize := width * bytesPerPixel
-	for y := 0; y < height; y++ {
-		srcPtr := unsafe.Pointer(uintptr(unsafe.Pointer(ptr)) + uintptr(y*rowBytes))
-		dstOff := y * goImg.Stride
-		// Direct unsafe copy using unsafe.Slice
-		srcSlice := unsafe.Slice((*byte)(srcPtr), rowSize)
-		copy(goImg.Pix[dstOff:dstOff+rowSize], srcSlice)
-	}
+	// Copy decoded data to Go image
+	dataSize := w * h * bytesPerPixel
+	srcSlice := unsafe.Slice((*byte)(unsafe.Pointer(cData)), dataSize)
+	copy(goImg.Pix, srcSlice)
 
 	return goImg, nil
 }
 
-// DecodeConfig reads enough of data to determine the image's configuration (dimensions, etc.).
-// Here we read the entire data and call a lightweight C function that only parses the header.
+// decodeConfig reads enough of data to determine the image's configuration (dimensions, etc.).
 func decodeConfig(data []byte) (image.Config, error) {
 	if len(data) == 0 {
 		return image.Config{}, fmt.Errorf("empty data buffer")
 	}
 
-	// Pin the data to prevent GC relocation
-	cData := C.CBytes(data)
-	defer C.free(cData)
-
-	var w, h C.uint32_t
-	C.get_heif_config(
-		(*C.uint8_t)(cData),
+	var width, height C.int
+	result := C.get_webp_config(
+		(*C.uint8_t)(unsafe.Pointer(&data[0])),
 		C.size_t(len(data)),
-		&w,
-		&h,
+		&width,
+		&height,
 	)
 
-	if w == 0 || h == 0 {
-		return image.Config{}, fmt.Errorf("failed to get HEIF image config")
+	if result == 0 || width <= 0 || height <= 0 {
+		return image.Config{}, fmt.Errorf("failed to get WebP image config")
 	}
 
 	return image.Config{
 		ColorModel: color.RGBAModel,
-		Width:      int(w),
-		Height:     int(h),
+		Width:      int(width),
+		Height:     int(height),
 	}, nil
 }

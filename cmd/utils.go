@@ -2,13 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/vegidio/heif-go"
-	_ "github.com/vegidio/heif-go"
-	"golang.org/x/image/bmp"
-	_ "golang.org/x/image/bmp"
-	"golang.org/x/image/tiff"
-	_ "golang.org/x/image/tiff"
-	_ "golang.org/x/image/webp"
 	"image"
 	"image/gif"
 	_ "image/gif"
@@ -20,11 +13,18 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/vegidio/webp-go"
+	_ "github.com/vegidio/webp-go"
+	"golang.org/x/image/bmp"
+	_ "golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
+	_ "golang.org/x/image/tiff"
 )
 
 var ValidImageTypes = []string{".bmp", ".gif", ".jpg", ".jpeg", ".png", ".tiff"}
 
-func encodeHeic(input, output string, options *webp.Options) (image.Image, os.FileInfo, error) {
+func encodeWebp(input, output string, options *webp.Options) (image.Image, os.FileInfo, error) {
 	inputFile, err := os.Open(input)
 	if err != nil {
 		return nil, nil, err
@@ -57,7 +57,7 @@ func encodeHeic(input, output string, options *webp.Options) (image.Image, os.Fi
 	return img, info, nil
 }
 
-func decodeHeic(input, output string) (image.Image, os.FileInfo, error) {
+func decodeWebp(input, output string) (image.Image, os.FileInfo, error) {
 	ext := strings.ToLower(filepath.Ext(output))
 	if !slices.Contains(ValidImageTypes, ext) {
 		return nil, nil, fmt.Errorf("invalid output file type: %s", ext)

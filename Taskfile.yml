@@ -13,7 +13,7 @@ tasks:
     requires:
       vars: [ os, arch ]
     vars:
-      file: "{{if eq .os `windows`}}heic.exe{{else}}heic{{end}}"
+      file: "{{if eq .os `windows`}}webp.exe{{else}}webp{{end}}"
     env:
       CGO_ENABLED: 1
       GOOS: "{{.os}}"
@@ -21,7 +21,7 @@ tasks:
     cmds:
       - |
         go build -o "{{.ROOT_DIR}}/build/{{.file}}" .
-        {{if .isPackage}}7z a -tzip -mx=9 "{{.ROOT_DIR}}/build/heic_{{.os}}_{{.arch}}.zip" "{{.ROOT_DIR}}/build/{{.file}}"{{end}}
+        {{if .isPackage}}7z a -tzip -mx=9 "{{.ROOT_DIR}}/build/webp_{{.os}}_{{.arch}}.zip" "{{.ROOT_DIR}}/build/{{.file}}"{{end}}
 
   package:
     desc: Build and pack in .zip files

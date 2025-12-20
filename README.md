@@ -34,7 +34,7 @@ This is a CGO library, so to use it, you _must_ enable CGO while building your a
 $ CGO_ENABLED=1 go build /path/to/your/app.go
 ```
 
-Here are some examples of how to encode and decode HEIC images using this library. These snippets don't have any error handling for the sake of simplicity, but you should always check for errors in production code.
+Here are some examples of how to encode and decode WebP images using this library. These snippets don't have any error handling for the sake of simplicity, but you should always check for errors in production code.
 
 #### Encoding
 
@@ -47,7 +47,7 @@ err = webp.Encode(webpFile, originalImage, nil) // encode the image & save it to
 #### Decoding
 
 ```go
-import _ "github.com/vegidio/webp-go" // do a blank import to register the HEIC decoder
+import _ "github.com/vegidio/webp-go" // do a blank import to register the WebP decoder
 webpFile, err := os.Open("/path/to/image.webp") // open the WebP file to be decoded
 webpImage, _, err := image.Decode(webpFile) // decode the image
 ```

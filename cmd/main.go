@@ -3,35 +3,36 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/urfave/cli/v3"
-	"github.com/vegidio/heif-go"
 	"image"
 	"os"
 	"time"
+
+	"github.com/urfave/cli/v3"
+	"github.com/vegidio/webp-go"
 )
 
 func main() {
 	var quality uint
 
 	cmd := &cli.Command{
-		Name:            "heic",
-		Usage:           "a tool to encode & decode HEIC images",
-		UsageText:       "heic <enc|dec> <input> <output>",
+		Name:            "webp",
+		Usage:           "a tool to encode & decode WebP images",
+		UsageText:       "webp <enc|dec> <input> <output>",
 		Version:         "<version>",
 		HideHelpCommand: true,
 		Commands: []*cli.Command{
 			{
 				Name:      "encode",
 				Aliases:   []string{"enc"},
-				Usage:     "encode an image to HEIC",
-				UsageText: "heic enc <input> <output>",
+				Usage:     "encode an image to WebP",
+				UsageText: "webp enc <input> <output>",
 				Flags: []cli.Flag{
 					&cli.UintFlag{
 						Name:        "quality",
 						Aliases:     []string{"q"},
 						Usage:       "image quality between 0-100; higher values result in better quality.",
-						Value:       60,
-						DefaultText: "60",
+						Value:       75,
+						DefaultText: "75",
 						Destination: &quality,
 						Required:    false,
 					},
@@ -53,7 +54,7 @@ func main() {
 					}
 
 					now := time.Now()
-					img, info, err := encodeHeic(input, output, options)
+					img, info, err := encodeWebp(input, output, options)
 					duration := time.Since(now)
 
 					if err == nil {
@@ -66,8 +67,8 @@ func main() {
 			{
 				Name:      "decode",
 				Aliases:   []string{"dec"},
-				Usage:     "decode an HEIC image to a different format",
-				UsageText: "heic dec <input> <output>",
+				Usage:     "decode an WebP image to a different format",
+				UsageText: "webp dec <input> <output>",
 				Action: func(ctx context.Context, command *cli.Command) error {
 					input := command.Args().First()
 					output := command.Args().Tail()[0]
@@ -81,7 +82,7 @@ func main() {
 					}
 
 					now := time.Now()
-					img, info, err := decodeHeic(input, output)
+					img, info, err := decodeWebp(input, output)
 					duration := time.Since(now)
 
 					if err == nil {
@@ -109,11 +110,11 @@ func printResult(img image.Image, info os.FileInfo, duration time.Duration, isEn
 		cmd = "encoded"
 	}
 
-	msg := fmt.Sprintf("✅  Successfully %s image to %s in %s",
+	msg := fmt.Sprintf("✅ Successfully %s image to %s in %s",
 		cmd, info.Name(), duration.Truncate(time.Millisecond))
 	fmt.Println(green.Render(msg))
 
-	msg = fmt.Sprintf("🖼 Image dimensions: %dx%d; size: %d bytes",
+	msg = fmt.Sprintf("🖼  Image dimensions: %dx%d; size: %d bytes",
 		img.Bounds().Dx(), img.Bounds().Dy(), info.Size())
 	fmt.Println(yellow.Render(msg))
 }
