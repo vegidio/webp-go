@@ -4,7 +4,7 @@ A Go library and CLI tool to encode/decode WebP images without system dependenci
 
 ## 💡 Motivation
 
-There are a couple of libraries to encode WebP images in Go, and even though they do the job well, they have one limitation that don't satisfy my needs: they either depend on libraries to be installed on the system to be built and/or later be executed.
+There are a couple of libraries to encode WebP images in Go, and even though they do the job well, they have one limitation that don't satisfy my needs: they depend on libraries to be installed on the system to be built and/or later be executed.
 
 **webp-go** uses CGO to create a static implementation of WebP, so you don't need to have `libwebp` (or any of its sub-dependencies) installed to encode WebP images.
 
